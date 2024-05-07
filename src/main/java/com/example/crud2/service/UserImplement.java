@@ -4,6 +4,7 @@ import com.example.crud2.entity.UserEntity;
 import com.example.crud2.model.GetResp;
 import com.example.crud2.model.PostModel;
 import com.example.crud2.repository.UserRepository;
+import org.apache.catalina.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -13,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -38,8 +40,18 @@ public class UserImplement implements UserService{
                         .singletonMap("message", message));
     }
 
+    private static ResponseEntity<?> createResponse(String message, HttpStatus status) {
+        return ResponseEntity
+                .status(status)
+                .body(Collections.singletonMap("message", message));
+    }
+
     private String HashPwd(String password) {
-        return BCrypt.hashpw(password, BCrypt.gensalt(10));
+        return BCrypt.hashpw(password, BCrypt.gensalt(15));
+    }
+
+    private Boolean checkUser(String userName){
+        return userRepository.existsByUsernameAndDeletedFalse(userName);
     }
 
     private Optional<UserEntity> getById(Long id) {
@@ -70,15 +82,15 @@ public class UserImplement implements UserService{
     @Override
     public ResponseEntity<?> saveUser(UserEntity userEntity) {
         try {
-            userEntity.setPassword(
-                    HashPwd(userEntity.getPassword())
-            );
-            UserEntity user =  userRepository.save(userEntity);
-            return ResponseEntity
-                    .status(HttpStatus.CREATED)
-                    .body(new PostModel(user.getId(), "User has been created"));
+            if(checkUser(userEntity.getUsername())) {
+                return createResponse("User already exists...", HttpStatus.CONFLICT);
+            }
 
-        } catch (Exception e) {
+            userEntity.setPassword(HashPwd(userEntity.getPassword()));
+
+            UserEntity user =  userRepository.save(userEntity);
+            return createResponse("User has been created", HttpStatus.CREATED);
+            } catch (Exception e) {
             return exceptionResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
