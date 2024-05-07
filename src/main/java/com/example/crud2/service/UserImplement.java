@@ -9,6 +9,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -24,6 +25,27 @@ public class UserImplement implements UserService{
         this.userRepository = userRepository;
     }
 
+    private ResponseEntity<?> updateResponse(String message) {
+        return ResponseEntity
+                .ok(Collections
+                        .singletonMap("message", message));
+    }
+
+    private static ResponseEntity<?> exceptionResponse(String message, HttpStatus status) {
+        return ResponseEntity
+                .status(status)
+                .body(Collections
+                        .singletonMap("message", message));
+    }
+
+    private String HashPwd(String password) {
+        return BCrypt.hashpw(password, BCrypt.gensalt(10));
+    }
+
+    private Optional<UserEntity> getById(Long id) {
+        return userRepository.findById(id);
+    }
+
     @Override
     public GetResp findAll(int page, int per_page, Sort.Direction orderBy, String sortBy) {
         Sort sort = Sort.by(orderBy, sortBy);
@@ -35,118 +57,78 @@ public class UserImplement implements UserService{
     @Override
     public ResponseEntity<?> findById(Long id) {
         try {
-            Optional<UserEntity> existingUser =  userRepository.findById(id);
-            if (existingUser.isPresent())
-                return ResponseEntity.ok(existingUser);
-            else
-                throw new NoSuchElementException("User with ID " + id + " not found");
-
+            return getById(id).map(ResponseEntity::ok)
+                    .orElseThrow(() ->
+                            new NoSuchElementException("Users with ID " + id + " not found"));
         } catch (NoSuchElementException e) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.NOT_FOUND);
         } catch (Exception e) {
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @Override
     public ResponseEntity<?> saveUser(UserEntity userEntity) {
         try {
+            userEntity.setPassword(
+                    HashPwd(userEntity.getPassword())
+            );
             UserEntity user =  userRepository.save(userEntity);
             return ResponseEntity
                     .status(HttpStatus.CREATED)
                     .body(new PostModel(user.getId(), "User has been created"));
 
         } catch (Exception e) {
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Collections.singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
 
     @Override
     public ResponseEntity<?> updateUser(Long id, UserEntity userEntity) {
         try {
-            Optional<UserEntity> user = userRepository.findById(id);
-            if (user.isPresent()) {
-                UserEntity existingUser = user.get();
-                userRepository.save(existingUser);
-                return ResponseEntity
-                        .ok(Collections
-                                .singletonMap("message", "User with id " + id + " has been updated"));
-            } else {
-                throw new NoSuchElementException("User with id " + id + " not found");
-            }
+            return getById(id).map(user -> {
+                userRepository.save(userEntity);
+                return updateResponse("User with id " + id + " has been updated");
+            }).orElseThrow(() ->
+                    new NoSuchElementException("User with id " + id + " not found"));
         } catch (NoSuchElementException e) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.NOT_FOUND);
         } catch (Exception e) {
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
-
     }
 
     public ResponseEntity<?> patchUser(Long id, UserEntity userEntity) {
         try {
-            Optional<UserEntity> user = userRepository.findById(id);
-            if (user.isPresent()) {
-                UserEntity existingUser = user.get();
+            return getById(id).map(user -> {
                 if (userEntity.getDeleted() != null) {
-                    existingUser.setDeleted(userEntity.getDeleted());
+                    user.setDeleted(userEntity.getDeleted());
                 }
-                userRepository.save(existingUser);
-                return ResponseEntity
-                        .ok(Collections
-                                .singletonMap("message", "User with id " + id + " has been updated"));
-            } else {
-                throw new NoSuchElementException("User with id " + id + " not found");
-            }
+                userRepository.save(user);
+                return updateResponse("User with id " + id + " has been updated");
+            }).orElseThrow(() ->
+                    new NoSuchElementException("User with id " + id + " not found"));
         } catch (NoSuchElementException e) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.NOT_FOUND);
         } catch (Exception e) {
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @Override
     public ResponseEntity<?> deleteUser(Long id) {
         try {
-            Optional<UserEntity> existingUser =  userRepository.findById(id);
-            if (existingUser.isPresent()) {
-                UserEntity user = existingUser.get();
+            return getById(id).map(user -> {
                 user.setDeleted(true);
                 userRepository.save(user);
-                return ResponseEntity.ok(Collections
-                        .singletonMap("message", "User with ID " + id + " has been deleted"));
-            }
-            else
-                throw new NoSuchElementException("User with ID " + id + " not found");
+                return updateResponse("User with ID " + id + " has been deleted");
+            }).orElseThrow(() ->
+                    new NoSuchElementException("User with ID " + id + " not found"));
         } catch (NoSuchElementException e) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.NOT_FOUND);
         } catch (Exception e) {
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Collections
-                            .singletonMap("message", e.getMessage()));
+            return exceptionResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }
